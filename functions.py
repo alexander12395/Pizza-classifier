@@ -17,111 +17,43 @@ def get_folder_RGB(folder):
 #lists all files in directory, runs through them, imports all into rgb, changes definition
 
 
-class neuron:
-    
-    def __init__(self,input_count:int):
-        self.weights=np.random.randn(input_count)/np.sqrt(input_count)
-        self.bias=np.random.randn()
-        self.grad=0
-        self.inputs=np.empty(input_count)
-        self.output_value=0
-    
-
-    def compute_output(self,inputs ):
-        total=np.dot(self.weights,inputs)+self.bias
-        return np.tanh(total)
-#neuron class holds weights, uses non linear function tanh
-
-    
-
 class layer:
-    def __init__(self,layer_number:int,neuron_count:int,prev_layer_neuron_count:int,):
-        self.layer_number=layer_number
-        self.neuron_count=neuron_count
-        self.neuron_array=np.empty(neuron_count,dtype=object)
-        self.prev_layer_neuron_count=prev_layer_neuron_count
-        self.neuron_output=np.empty(neuron_count)
-        for n in range(neuron_count):   
-            self.neuron_array[n]=neuron(prev_layer_neuron_count)
-
-    def forward(self,prev_outputs:object):
-        for n in range(self.neuron_count):
-            total=0
-            total=self.neuron_array[n].compute_output(prev_outputs)
-            self.neuron_array[n].output_value = total 
-            self.neuron_output[n]=total
-        return self.neuron_output
-    
-
+    def __init__(self,number_of_neurons:int,number_of_previous_neurons:int):
+        self.neuron_count=number_of_neurons
+        self.bias_array=np.zeros(number_of_neurons)
+        self.weight_array=np.random.randn(number_of_neurons,number_of_previous_neurons)/np.sqrt(number_of_previous_neurons)#gives the weights array, rows are neurons, columns are weights, divides by number of inputs to give a make the weighted sum not saturate
+        self.neuron_outputs=np.zeros(number_of_neurons)
+        self.grad_array=np.zeros(number_of_neurons)
 class network:
-    def __init__(self,amount_layers:int,neuron_taper:int,output:int,initial_hidden_layer_neurons:int,input_size:int):
-        self.amount_layers=amount_layers
-        self.neuron_taper=neuron_taper
-        self.layer_array=np.empty(amount_layers,dtype=object)
-        prev_count = input_size
-        for l in range(amount_layers):
-            if l==amount_layers-1:
-                self.layer_array[l]=layer(l,output,prev_count)
+    def __init__(self,number_of_layers:int,neurons_per_layer:list,input_size:int):
+        self.layer_array=np.empty(number_of_layers,dtype=object)
+        self.number_of_layers=number_of_layers
+        for l in range(number_of_layers):
+            if l==0:
+                self.layer_array[l]=layer(neurons_per_layer[l],input_size)
             else:
-                neuron_count = max(initial_hidden_layer_neurons - neuron_taper * l, output)
-                self.layer_array[l] = layer(l, neuron_count, prev_count)
-                prev_count = neuron_count   # remembers what ACTUALLY happened, floor included
+                self.layer_array[l]=layer(neurons_per_layer[l],neurons_per_layer[l-1])
 
-
-
-    def forward_pass(self, inputs):
-            current = inputs
-            for l in range(self.amount_layers):
-                current = self.layer_array[l].forward(current)
-            return current
-    
-    def backprop(self,ideal_outputs:object,learning_rate:float,pixel_inputs:object):
-        mse:float=0
-        for c in range(len(ideal_outputs)):
-            y_i=self.layer_array[self.amount_layers-1].neuron_output[c]
-            y_hat=ideal_outputs[c]
-            mse+=(y_i-y_hat)**2
-        mse=mse*(1/len(ideal_outputs))
-        
-        for n in range(self.layer_array[self.amount_layers-1].neuron_count):
-            a=self.layer_array[self.amount_layers-1].neuron_array[n].output_value
-            self.layer_array[self.amount_layers-1].neuron_array[n].grad=(2*(a-ideal_outputs[n]))*(1-a**2)
-        
-
-        for i in range(self.amount_layers-2,-1,-1):
-            for n in range(self.layer_array[i].neuron_count):
-                sum_grad=0
-                a=self.layer_array[i].neuron_array[n].output_value
-                
-                for m in range(self.layer_array[i+1].neuron_count):
-                    weight=self.layer_array[i+1].neuron_array[m].weights[n]
-                    prev_grad=self.layer_array[i+1].neuron_array[m].grad
-                    sum_grad+=weight*prev_grad
-                self.layer_array[i].neuron_array[n].grad=sum_grad*(1-a**2)
+    def forward_pass(self,input_images):
+        for l in range(self.number_of_layers):
+            weights=self.layer_array[l].weight_array
+            bias=self.layer_array[l].bias_array  
             
-        for i in range(self.amount_layers):
-            if i==0:
-                previous_outputs=pixel_inputs
+            if l==0:
+                self.layer_array[l].neuron_outputs=np.tanh(weights@input_images +bias)
             else:
-                previous_outputs=self.layer_array[i-1].neuron_output
-            for n in range(self.layer_array[i].neuron_count,):
-                grad=self.layer_array[i].neuron_array[n].grad
-                neuron = self.layer_array[i].neuron_array[n]
-                neuron.weights = neuron.weights - learning_rate * grad * previous_outputs
-                self.layer_array[i].neuron_array[n].bias -= learning_rate * grad
-
-
-
-        
-
-
-
-
-
-                
-
+                prev_output=self.layer_array[l-1].neuron_outputs
+                self.layer_array[l].neuron_outputs=np.tanh(weights@prev_output +bias)
+        return(self.layer_array[-1].neuron_outputs)
     
-     
-        
 
-
+    def backpropagation(self,target_outputs:list,learning_rate:float):
+        target_outputs=np.array(target_outputs)
+        MSE=np.mean((self.layer_array[-1].neuron_outputs-target_outputs)**2)
+        self.layer_array[-1].grad_array=(2*(self.layer_array[-1].neuron_outputs-target_outputs)*(1-self.layer_array[-1].neuron_outputs**2))
+        for l in range(self.number_of_layers-2, -1, -1):
+            a = self.layer_array[l].neuron_outputs
+            next_weights = self.layer_array[l+1].weight_array
+            next_grad = self.layer_array[l+1].grad_array
+            self.layer_array[l].grad_array = (next_weights.T @ next_grad) * (1 - a**2)
+            self.layer_array[l].bias_array=next_grad*learning_rate
