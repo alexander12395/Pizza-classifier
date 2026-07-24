@@ -47,7 +47,7 @@ class network:
         return(self.layer_array[-1].neuron_outputs)
     
 
-    def backpropagation(self,target_outputs:list,learning_rate:float):
+    def backpropagation(self,target_outputs:list,learning_rate:float,input_images):
         target_outputs=np.array(target_outputs)
         MSE=np.mean((self.layer_array[-1].neuron_outputs-target_outputs)**2)
         self.layer_array[-1].grad_array=(2*(self.layer_array[-1].neuron_outputs-target_outputs)*(1-self.layer_array[-1].neuron_outputs**2))
@@ -56,4 +56,11 @@ class network:
             next_weights = self.layer_array[l+1].weight_array
             next_grad = self.layer_array[l+1].grad_array
             self.layer_array[l].grad_array = (next_weights.T @ next_grad) * (1 - a**2)
-            self.layer_array[l].bias_array=next_grad*learning_rate
+            
+        for l in range(self.number_of_layers):  
+            inputs=input_images if l==0 else self.layer_array[l-1].neuron_outputs
+            
+            self.layer_array[l].bias_array-=self.layer_array[l].grad_array*learning_rate
+            
+            self.layer_array[l].weight_array-=learning_rate*np.outer(self.layer_array[l].grad_array,inputs)
+        return MSE
